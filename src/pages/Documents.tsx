@@ -14,6 +14,7 @@ export function Documents() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedProject, setSelectedProject] = useState<string>('')
@@ -54,25 +55,74 @@ export function Documents() {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      console.log('File selected:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      })
       setSelectedFile(file)
+    } else {
+      console.log('No file selected')
+      setSelectedFile(null)
     }
   }
 
   const uploadDocument = async () => {
-    if (!selectedFile || !selectedProject || !user) return
+    if (!selectedFile || !selectedProject || !user) {
+      console.error('Missing required fields for upload:', { 
+        hasFile: !!selectedFile, 
+        hasProject: !!selectedProject, 
+        hasUser: !!user 
+      })
+      return
+    }
+
+    // Add uploading state
+    setUploading(true)
 
     try {
+      console.log('Starting document upload:', {
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        fileType: selectedFile.type,
+        projectId: selectedProject
+      })
+
+      // Validate file before processing
+      if (!selectedFile) {
+        throw new Error('No file selected')
+      }
+      
+      if (selectedFile.size === 0) {
+        throw new Error('Selected file is empty')
+      }
+      
+      if (!selectedFile.name) {
+        throw new Error('File name is missing')
+      }
+      
+      // Check if it's a valid File object
+      if (!(selectedFile instanceof File)) {
+        throw new Error('Invalid file object')
+      }
+
       // Extract text content from the file
+      console.log('Extracting text from file...')
       const text = await blink.data.extractFromBlob(selectedFile)
+      console.log('Text extraction successful, length:', text.length)
       
       // Upload the file to storage
+      console.log('Uploading file to storage...')
       const { publicUrl } = await blink.storage.upload(
         selectedFile,
         `documents/${selectedProject}/${selectedFile.name}`,
         { upsert: true }
       )
+      console.log('File uploaded to storage:', publicUrl)
 
       // Create document record
+      console.log('Creating document record...')
       const document = await blink.db.documents.create({
         name: selectedFile.name,
         content: text,
@@ -84,6 +134,7 @@ export function Documents() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       })
+      console.log('Document record created:', document.id)
 
       setDocuments([document, ...documents])
       setSelectedFile(null)
@@ -91,6 +142,10 @@ export function Documents() {
       setIsUploadDialogOpen(false)
     } catch (error) {
       console.error('Failed to upload document:', error)
+      // Show user-friendly error message
+      alert(`Failed to upload document: ${error.message || 'Unknown error'}`)
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -123,6 +178,7 @@ export function Documents() {
             setSelectedFile(null)
             setSelectedProject('')
             setVisibility('team')
+            setUploading(false)
           }
         }}>
           <DialogTrigger asChild>
@@ -184,14 +240,25 @@ export function Documents() {
               </div>
 
               <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsUploadDialogOpen(false)}
+                  disabled={uploading}
+                >
                   Cancel
                 </Button>
                 <Button 
                   onClick={uploadDocument} 
-                  disabled={!selectedFile || !selectedProject}
+                  disabled={!selectedFile || !selectedProject || uploading}
                 >
-                  Upload Document
+                  {uploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload Document'
+                  )}
                 </Button>
               </div>
             </div>
