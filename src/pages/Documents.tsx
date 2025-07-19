@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Upload, FileText, Search, Filter, Eye, Lock, Users } from 'lucide-react'
+import { Upload, FileText, Search, Filter, Eye, Lock, Users, File } from 'lucide-react'
 import { blink } from '@/blink/client'
 import type { Document, Project, User } from '@/types'
 
@@ -22,6 +22,22 @@ export function Documents() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterVisibility, setFilterVisibility] = useState<'all' | 'private' | 'team'>('all')
   const [user, setUser] = useState<User | null>(null)
+
+  const getFileIcon = (fileName: string, fileType: string) => {
+    const extension = fileName.toLowerCase().split('.').pop()
+    
+    if (extension === 'pdf' || fileType === 'application/pdf') {
+      return <File className="h-6 w-6 text-red-600" />
+    } else if (extension === 'doc' || extension === 'docx' || fileType.includes('word')) {
+      return <FileText className="h-6 w-6 text-blue-600" />
+    } else if (extension === 'txt' || fileType === 'text/plain') {
+      return <FileText className="h-6 w-6 text-gray-600" />
+    } else if (extension === 'md' || fileType === 'text/markdown') {
+      return <FileText className="h-6 w-6 text-green-600" />
+    } else {
+      return <FileText className="h-6 w-6 text-gray-600" />
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -105,6 +121,35 @@ export function Documents() {
       // Check if it's a valid File object
       if (!(selectedFile instanceof File)) {
         throw new Error('Invalid file object')
+      }
+
+      // Validate file type and size
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain',
+        'text/markdown',
+        'application/rtf'
+      ]
+      
+      const fileExtension = selectedFile.name.toLowerCase().split('.').pop()
+      const allowedExtensions = ['pdf', 'doc', 'docx', 'txt', 'md', 'rtf']
+      
+      if (!allowedExtensions.includes(fileExtension || '')) {
+        throw new Error(`Unsupported file type. Please upload: ${allowedExtensions.join(', ').toUpperCase()} files`)
+      }
+
+      // Check file size (max 50MB)
+      const maxSize = 50 * 1024 * 1024 // 50MB
+      if (selectedFile.size > maxSize) {
+        throw new Error('File size too large. Maximum size is 50MB')
+      }
+
+      // Special handling for PDFs
+      if (fileExtension === 'pdf') {
+        console.log('Processing PDF file:', selectedFile.name)
+        // PDFs are supported by Blink's extractFromBlob function
       }
 
       // Extract text content from the file
@@ -191,7 +236,7 @@ export function Documents() {
             <DialogHeader>
               <DialogTitle>Upload Document</DialogTitle>
               <DialogDescription>
-                Upload a document to your project. The content will be processed for AI search.
+                Upload a document to your project. Supports PDF, Word, and text files. The content will be extracted and processed for AI search.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -201,12 +246,21 @@ export function Documents() {
                   id="file"
                   type="file"
                   onChange={handleFileSelect}
-                  accept=".pdf,.doc,.docx,.txt,.md"
+                  accept=".pdf,.PDF,.doc,.docx,.txt,.md,.rtf"
                 />
                 {selectedFile && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-                  </p>
+                  <div className="mt-2 p-3 bg-gray-50 rounded-md">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-900">{selectedFile.name}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {selectedFile.type || 'Unknown type'} • {(selectedFile.size / 1024).toFixed(1)} KB
+                      {selectedFile.name.toLowerCase().endsWith('.pdf') && (
+                        <span className="ml-2 text-blue-600">• PDF text extraction supported</span>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
               
@@ -299,7 +353,7 @@ export function Documents() {
             </h3>
             <p className="text-gray-500 text-center mb-6">
               {documents.length === 0 
-                ? 'Upload your first document to get started with AI-powered search.'
+                ? 'Upload your first document to get started with AI-powered search. Supports PDF, Word, and text files.'
                 : 'Try adjusting your search terms or filters.'
               }
             </p>
@@ -319,7 +373,7 @@ export function Documents() {
               <Card key={document.id} className="hover:shadow-md transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <FileText className="h-6 w-6 text-gray-600" />
+                    {getFileIcon(document.name, document.fileType)}
                     <Badge variant={document.visibility === 'private' ? 'secondary' : 'default'}>
                       {document.visibility === 'private' ? (
                         <>
